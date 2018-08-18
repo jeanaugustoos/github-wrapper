@@ -3,44 +3,45 @@ const List = require('prompt-list')
 const Input = require('prompt-input')
 const octokit = require('@octokit/rest')()
 const {
+  anyPass,
   concat,
+  descend,
+  filter,
   map,
+  pickAll,
   pluck,
+  prop,
+  propEq,
+  sortBy,
   split,
   startsWith,
 } = require('ramda')
 
-function createComment ({
-  octokit,
-  owner,
-  issuesPaths,
-  comment,
-}) {
-  return Promise.map(issuesPaths, async function (issue) {
-    const repo = split('/', issue)[0]
-    const number = split('/', issue)[1]
-
-    const { data } = await octokit.issues.createComment({
-      owner,
-      repo,
-      number,
-      body: comment
-    })
-
-    console.log(`Your comment was created at ${repo}/${number} successfully!`)
-  })
-}
+// function createComment ({
+//   octokit,
+//   owner,
+//   issuesPaths,
+//   comment,
+// }) {
+//   return Promise.map(issuesPaths, async function (issue) {
+//     const repo = split('/', issue)[0]
+//     const number = split('/', issue)[1]
+//
+//     const { data } = await octokit.issues.createComment({
+//       owner,
+//       repo,
+//       number,
+//       body: comment
+//     })
+//
+//     console.log(`Your comment was created at ${repo}/${number} successfully!`)
+//   })
+// }
 
 async function run () {
-  const username = await new Input({
-    name: 'username',
-    message: 'What is your Github username?',
-  }).run()
-
-  const token = await new Input({
-    name: 'token',
-    message: 'Enter your Github token, please!',
-  }).run()
+  const username = ''
+  const token = ''
+  const issues = ['247','268']
 
   octokit.authenticate({
     type: 'basic',
@@ -48,68 +49,34 @@ async function run () {
     password: token,
   })
 
-  const { data: orgsResponse } = await octokit.users.getOrgs()
+  for (let issue of issues) {
+    console.log(issue)
+    const { data: events } = await octokit.issues.getEvents({
+      owner: 'pagarme',
+      repo: 'ghostbusters',
+      number: issue,
+      per_page: '100'
+    })
 
-  const orgs = pluck('login', orgsResponse)
-
-  const org = await new List({
-    name: 'org',
-    message: 'Select an organization',
-    choices: orgs,
-  }).run()
-
-  const task = await new List({
-    name: 'task',
-    message: 'Select a type of task',
-    choices: [
-      '1. Send a comment to multiples issues in a specific repo',
-      '2. Send a comment to specific paths',
-    ],
-  }).run()
-
-  let issuesPaths
-
-  if (startsWith('1', task)) {
-    const repo = await new Input({
-      name: 'repo',
-      message: 'Inform the name of the repo',
-    }).run()
-
-    if (!repo) return
-
-    const issues = await new Input({
-      name: 'issue',
-      message: 'Inform the issue that you want to send a comment (for multiple issues separate them by comma)',
-    }).run()
-
-    if (!issues) return
-
-    issuesPaths = map(
-      concat(`${repo}/`),
-      split(',', issues)
+    const filteredEvents = filter(
+      anyPass([
+        propEq('event', 'added_to_project'),
+        propEq('event', 'moved_columns_in_project')
+      ]),
+      events
     )
-  } else {
-    const issues = await new Input({
-      name: 'issues-paths',
-      message: 'Inform the repo and issue (roadmap/123) that you want to send a comment (for multiple separate them by comma)',
-    }).run()
 
-    if (!issues) return
+    const eventDesiredProps = ['event', 'node_id', 'url', 'created_at']
 
-    issuesPaths = split(',', issues)
+    const response = map(
+      pickAll(eventDesiredProps)
+    )(filteredEvents)
+    console.log(response)
   }
-
-  const comment = await new Input({
-    name: 'comment',
-    message: 'Type your comment:',
-  }).run()
-
-  await createComment({
-    octokit,
-    owner: org,
-    issuesPaths,
-    comment,
-  })
 }
 
-run()
+try {
+  run()
+} catch (err) {
+  console.log(err.message)
+}
